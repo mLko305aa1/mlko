@@ -1,0 +1,8 @@
+{
+    "type": "module",
+    "dependencies": {
+        "express": "^4.18.2",
+        "stopword": "^2.0.0",
+        "arabic-stemmer": "^1.0.4"
+    }
+}
