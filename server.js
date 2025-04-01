@@ -1,62 +1,50 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import fs from 'fs';
-import stopword from 'stopword';
-import ArabicStemmer from 'arabic-stemmer';
-
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const bodyParser = require('body-parser');
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// إعدادات الوسيط (middleware)
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static('public')); // لعرض ملفات الواجهة من مجلد public
 
-// قاعدة البيانات
-let database = {};
-try {
-  database = JSON.parse(fs.readFileSync('database.json'));
-} catch (err) {
-  console.log('جارٍ إنشاء قاعدة بيانات جديدة');
+// مسار ملف JSON لتخزين الرسائل
+const messagesFilePath = path.join(__dirname, 'messages.json');
+
+// التأكد من وجود ملف messages.json، وإن لم يكن موجودًا نقوم بإنشائه
+if (!fs.existsSync(messagesFilePath)) {
+  fs.writeFileSync(messagesFilePath, JSON.stringify([]));
 }
 
-// معالجة النص العربي
-function processText(text) {
-  // إزالة علامات الترقيم
-  text = text.replace(/[.,!؟]/g, '');
-  
-  // تقسيم الكلمات
-  let words = text.split(' ').filter(word => word.trim() !== '');
-  
-  // إزالة الكلمات الشائعة
-  words = stopword.removeStopwords(words, stopword.ar);
-  
-  // استخراج الجذور
-  const stemmer = new ArabicStemmer();
-  words = words.map(word => stemmer.stemWord(word));
-  
-  return words.sort();
-}
-
-// البحث عن الرد
-function findReply(inputWords) {
-  for (const [key, value] of Object.entries(database)) {
-    const keyWords = key.split(',');
-    if (inputWords.every(word => keyWords.includes(word))) {
-      return value;
-    }
-  }
-  return null;
-}
-
-// نقطة النهاية للدردشة
-app.post('/chat', (req, res) => {
-  const userMessage = req.body.message;
-  const processedWords = processText(userMessage);
-  const reply = findReply(processedWords) || "لا أعرف الإجابة. ماذا أردت أن أقول؟";
-  
-  if (!findReply(processedWords)) {
-    database[processedWords.join(',')] = userMessage;
-    fs.writeFileSync('database.json', JSON.stringify(database));
-  }
-  
-  res.json({ reply });
+// نقطة النهاية لجلب جميع الرسائل
+app.get('/messages', (req, res) => {
+  fs.readFile(messagesFilePath, 'utf8', (err, data) => {
+    if (err) return res.status(500).send('حدث خطأ أثناء قراءة الرسائل');
+    const messages = JSON.parse(data);
+    res.json(messages);
+  });
 });
 
-app.listen(3000, () => console.log('الخادم يعمل على port 3000'));
+// نقطة النهاية لإضافة رسالة جديدة
+app.post('/messages', (req, res) => {
+  const newMessage = {
+    name: req.body.name,
+    message: req.body.message,
+    timestamp: Date.now()
+  };
+
+  fs.readFile(messagesFilePath, 'utf8', (err, data) => {
+    if (err) return res.status(500).send('حدث خطأ أثناء قراءة الرسائل');
+    const messages = JSON.parse(data);
+    messages.push(newMessage);
+    fs.writeFile(messagesFilePath, JSON.stringify(messages, null, 2), (err) => {
+      if (err) return res.status(500).send('حدث خطأ أثناء حفظ الرسالة');
+      res.status(200).json(newMessage);
+    });
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`الخادم يعمل على المنفذ http://localhost:${PORT}`);
+});
