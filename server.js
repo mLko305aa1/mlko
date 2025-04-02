@@ -3,11 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
 const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
 const PORT = process.env.PORT || 3000;
 
 // إعدادات الوسيط (middleware)
 app.use(bodyParser.json());
-app.use(express.static('public')); // لعرض ملفات الواجهة من مجلد public
+app.use(express.static('public')); // عرض ملفات الواجهة من مجلد public
 
 // مسار ملف JSON لتخزين الرسائل
 const messagesFilePath = path.join(__dirname, 'messages.json');
@@ -45,6 +47,21 @@ app.post('/messages', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+// عداد المستخدمين الحاليين باستخدام Socket.IO
+let onlineUsers = 0;
+
+io.on('connection', socket => {
+  onlineUsers++;
+  // إرسال التحديث لجميع العملاء
+  io.emit('updateUsers', onlineUsers);
+
+  // عند قطع الاتصال (مغادرة الصفحة)
+  socket.on('disconnect', () => {
+    onlineUsers = Math.max(onlineUsers - 1, 0);
+    io.emit('updateUsers', onlineUsers);
+  });
+});
+
+http.listen(PORT, () => {
   console.log(`الخادم يعمل على المنفذ http://localhost:${PORT}`);
 });
